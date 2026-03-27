@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "export",
+  basePath: "/tt-range-management-system-proto",
+  images: { unoptimized: true },
 };
 
 export default nextConfig;
