@@ -55,18 +55,18 @@ const DEFAULT_SNAPSHOT: SettingsSnapshot = {
 let _savedSnapshot: SettingsSnapshot = { ...DEFAULT_SNAPSHOT, blockedBayNums: [...DEFAULT_SNAPSHOT.blockedBayNums], unlockedLengths: [...DEFAULT_SNAPSHOT.unlockedLengths], lockedLengths: [...DEFAULT_SNAPSHOT.lockedLengths] };
 
 const auditLog = [
-  { timestamp: '27/05/2025, 7:01 AM', change: 'Chargeable unit: closed.', user: 'nathan.ade@gmail.com' },
-  { timestamp: '27/05/2025, 7:02 AM', change: 'Chargeable unit: open.', user: 'nathan.ade@gmail.com' },
-  { timestamp: '27/05/2025, 7:08 AM', change: 'Update open mode timeout.', user: 'nathan.ade@gmail.com' },
-  { timestamp: '27/05/2025, 10:14 AM', change: 'Update open mode timeout.', user: 'nathan.ade@gmail.com' },
-  { timestamp: '26/12/2025, 6:04 PM', change: 'Chargeable unit: closed.', user: 'nathan.ade@gmail.com' },
-  { timestamp: '26/12/2025, 6:08 PM', change: 'Chargeable unit: open.', user: 'nathan.ade@gmail.com' },
-  { timestamp: '26/12/2025, 6:08 PM', change: 'Chargeable unit: closed.', user: 'nathan.ade@gmail.com' },
-  { timestamp: '26/12/2025, 6:10 PM', change: 'Chargeable unit: open.', user: 'nathan.ade@gmail.com' },
+  { timestamp: '27/05/2025, 7:01 AM', change: 'Chargeable unit: closed.', user: 'nathan.a@gmail.com' },
+  { timestamp: '27/05/2025, 7:02 AM', change: 'Chargeable unit: open.', user: 'nathan.a@gmail.com' },
+  { timestamp: '27/05/2025, 7:08 AM', change: 'Update open mode timeout.', user: 'nathan.a@gmail.com' },
+  { timestamp: '27/05/2025, 10:14 AM', change: 'Update open mode timeout.', user: 'nathan.a@gmail.com' },
+  { timestamp: '26/12/2025, 6:04 PM', change: 'Chargeable unit: closed.', user: 'nathan.a@gmail.com' },
+  { timestamp: '26/12/2025, 6:08 PM', change: 'Chargeable unit: open.', user: 'nathan.a@gmail.com' },
+  { timestamp: '26/12/2025, 6:08 PM', change: 'Chargeable unit: closed.', user: 'nathan.a@gmail.com' },
+  { timestamp: '26/12/2025, 6:10 PM', change: 'Chargeable unit: open.', user: 'nathan.a@gmail.com' },
 ];
 
 const initialUsers: PortalUser[] = [
-  { id: 1, name: 'Nathan Ade', email: 'nathan.ade@gmail.com', role: 'Range Administrator' },
+  { id: 1, name: 'Nathan A', email: 'nathan.a@gmail.com', role: 'Range Administrator' },
   { id: 2, name: 'J. Maverick', email: 'jmaverick@gmail.com', role: 'Basic User' },
   { id: 3, name: 'C. Reeves', email: 'c.reeves@gmail.com', role: 'Range Administrator' },
   { id: 4, name: 'T. Holloway', email: 'tholloway@gmail.com', role: 'Range Administrator' },

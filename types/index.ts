@@ -9,6 +9,7 @@ export interface Bay {
   golferName?: string;
   sessionStarted?: string; // ISO string
   sessionDurationMin?: number;
+  sessionNotes?: string;
   floor: 'ground' | 'upper';
 }
 

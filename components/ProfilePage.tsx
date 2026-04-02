@@ -50,8 +50,8 @@ export default function ProfilePage() {
           <>
             {/* Name / email / sign out */}
             <div className="mb-8 pb-8 border-b" style={{ borderColor: '#e2e8f0' }}>
-              <div className="font-bold text-base mb-0.5" style={{ color: '#1e293b' }}>Nathan Ade</div>
-              <div className="text-sm mb-3" style={{ color: '#64748b' }}>nathan.ade@gmail.com</div>
+              <div className="font-bold text-base mb-0.5" style={{ color: '#1e293b' }}>Nathan A</div>
+              <div className="text-sm mb-3" style={{ color: '#64748b' }}>nathan.a@gmail.com</div>
               <button className="flex items-center gap-1.5 text-sm font-medium" style={{ color: '#ef4444' }}>
                 <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
                   <path d="M5.5 2H2.5A1 1 0 001.5 3v9a1 1 0 001 1h3M10 10.5l3-3-3-3M13.5 7.5H6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -157,7 +157,7 @@ export default function ProfilePage() {
                   </div>
                   <p className="text-sm mb-2" style={{ color: '#475569' }}>
                     {"We'll send an email to "}
-                    <span className="font-bold" style={{ color: '#1e293b' }}>nathan.ade@gmail.com</span>
+                    <span className="font-bold" style={{ color: '#1e293b' }}>nathan.a@gmail.com</span>
                     {" each time a ball goes over the net."}
                   </p>
                   <p className="text-sm" style={{ color: '#475569' }}>

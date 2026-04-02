@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { mockBays } from '@/data/mockData';
 import { Bay } from '@/types';
 
@@ -16,6 +16,23 @@ function ShieldIcon({ size = 28, color = '#c8d8e8' }: { size?: number; color?: s
         d="M10 19l4 4 8-8"
         stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+// ── Screen + caution icon (used for bays with a known issue) ──────────────────
+function ScreenCautionIcon({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      {/* Monitor body */}
+      <rect x="1" y="3" width="30" height="20" rx="2.5" fill="#c8d8e8" opacity="0.25"/>
+      <rect x="1" y="3" width="30" height="20" rx="2.5" stroke="#c8d8e8" strokeWidth="1.5"/>
+      {/* Stand */}
+      <rect x="13.5" y="23" width="5" height="3.5" fill="#c8d8e8" opacity="0.5"/>
+      <rect x="10" y="26.5" width="12" height="2" rx="1" fill="#c8d8e8" opacity="0.5"/>
+      {/* Caution triangle */}
+      <path d="M16 7l7 12H9L16 7z" fill="#f59e0b"/>
+      <text x="16" y="18.5" textAnchor="middle" fontSize="7" fontWeight="bold" fill="#fff" fontFamily="sans-serif">!</text>
     </svg>
   );
 }
@@ -170,16 +187,43 @@ interface BayCardProps {
   canAssign: boolean;
   onAssignClick: (bay: Bay) => void;
   onEndClick: (bay: Bay) => void;
+  onExpire: (bay: Bay) => void;
 }
 
-function BayCard({ bay, large, canAssign, onAssignClick, onEndClick }: BayCardProps) {
+function BayCard({ bay, large, canAssign, onAssignClick, onEndClick, onExpire }: BayCardProps) {
   const isAvailable = bay.status === 'available';
-  const isActive = bay.status === 'golfer' || bay.status === 'occupied';
-  const cornerColor = isAvailable ? '#5cb85c' : bay.status === 'golfer' ? '#3b82f6' : '#f59e0b';
 
-  const elapsed = bay.sessionStarted
-    ? Math.floor((Date.now() - new Date(bay.sessionStarted).getTime()) / 60000)
-    : 0;
+  const calcRemaining = () => {
+    if (!bay.sessionStarted || !bay.sessionDurationMin) return null;
+    const elapsed = Math.floor((Date.now() - new Date(bay.sessionStarted).getTime()) / 60000);
+    return Math.max(0, bay.sessionDurationMin - elapsed);
+  };
+
+  const [minutesRemaining, setMinutesRemaining] = useState<number | null>(calcRemaining);
+
+  // Recalculate immediately whenever session changes (e.g. bay just assigned)
+  useEffect(() => {
+    setMinutesRemaining(calcRemaining());
+  }, [bay.sessionStarted, bay.sessionDurationMin]);
+
+  useEffect(() => {
+    if (!canAssign || isAvailable || !bay.sessionStarted || !bay.sessionDurationMin) return;
+    const interval = setInterval(() => {
+      const remaining = calcRemaining();
+      setMinutesRemaining(remaining);
+      if (remaining === 0) onExpire(bay);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [canAssign, isAvailable, bay.sessionStarted, bay.sessionDurationMin]);
+
+  // Corner color logic:
+  // - canAssign bays: green=available, blue=assigned
+  // - non-canAssign bays: green=available, amber=occupied
+  const cornerColor = isAvailable
+    ? '#5cb85c'
+    : canAssign
+      ? '#3b82f6'
+      : '#f59e0b';
 
   if (!large) {
     // Small grid card
@@ -195,10 +239,10 @@ function BayCard({ bay, large, canAssign, onAssignClick, onEndClick }: BayCardPr
         </div>
         {/* Shield icon */}
         <div className="absolute top-1 right-1">
-          <ShieldIcon size={18} color={bay.number === 9 ? '#f59e0b' : '#c8d8e8'}/>
+          {bay.number === 9 ? <ScreenCautionIcon size={18}/> : <ShieldIcon size={18} color="#c8d8e8"/>}
         </div>
-        {/* Assign indicator */}
-        {isAvailable && (
+        {/* Assign indicator for assignable available bays */}
+        {isAvailable && canAssign && (
           <div className="absolute bottom-1 left-0 right-0 flex justify-center">
             <div className="w-8 h-1 rounded" style={{ backgroundColor: '#3b82f6' }}/>
           </div>
@@ -228,15 +272,22 @@ function BayCard({ bay, large, canAssign, onAssignClick, onEndClick }: BayCardPr
       {/* Top bar */}
       <div className="flex items-start justify-between px-3 pt-3 mb-1" style={{ paddingLeft: '56px' }}>
         <span className="font-black text-base" style={{ color: '#1e293b' }}>
-          {isAvailable ? 'Available' : bay.status === 'golfer' ? bay.golferName || 'Golfer' : 'Occupied'}
+          {isAvailable
+            ? 'Available'
+            : canAssign
+              ? bay.golferName || 'Golfer'
+              : 'Occupied'}
         </span>
-        <ShieldIcon size={26} color={bay.number === 9 ? '#f59e0b' : '#c8d8e8'}/>
+        {bay.number === 9 ? <ScreenCautionIcon size={26}/> : <ShieldIcon size={26} color="#c8d8e8"/>}
       </div>
 
-      {/* Session time if active */}
-      {isActive && (
+      {/* Session time + notes — only for blocked bays in use */}
+      {canAssign && !isAvailable && (
         <div className="px-3 mb-1">
-          <span className="text-xs" style={{ color: '#64748b' }}>{elapsed} min</span>
+          <div className="mt-2 text-xs" style={{ color: '#64748b' }}>{minutesRemaining !== null ? `${minutesRemaining} min remaining` : ''}</div>
+          {bay.sessionNotes && (
+            <div className="mt-4 text-xs italic" style={{ color: '#94a3b8' }}>{`Note: ${bay.sessionNotes}`}</div>
+          )}
         </div>
       )}
 
@@ -245,10 +296,10 @@ function BayCard({ bay, large, canAssign, onAssignClick, onEndClick }: BayCardPr
         <GolferSilhouette />
       </div>
 
-      {/* Assign / End button */}
-      <div className="px-3 pb-3 flex justify-center">
-        {isAvailable ? (
-          canAssign ? (
+      {/* Action button — only for assignable bays */}
+      {canAssign && (
+        <div className="px-3 pb-3 flex justify-center">
+          {isAvailable ? (
             <button
               onClick={() => onAssignClick(bay)}
               className="px-6 py-1.5 rounded text-white text-sm font-semibold"
@@ -257,32 +308,43 @@ function BayCard({ bay, large, canAssign, onAssignClick, onEndClick }: BayCardPr
               Assign
             </button>
           ) : (
-            <span className="text-xs px-3 py-1 rounded" style={{ backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
-              Guest access
-            </span>
-          )
-        ) : (
-          <button
-            onClick={() => onEndClick(bay)}
-            className="px-6 py-1.5 rounded text-white text-sm font-semibold"
-            style={{ backgroundColor: '#dc2626' }}
-          >
-            End
-          </button>
-        )}
-      </div>
+            <button
+              onClick={() => onEndClick(bay)}
+              className="px-6 py-1.5 rounded text-white text-sm font-semibold"
+              style={{ backgroundColor: '#dc2626' }}
+            >
+              End
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Monitor card for Screen Power ────────────────────────────────────────────
-function MonitorCard({ bay, onToggle }: { bay: Bay; onToggle: (id: string) => void }) {
+function MonitorCard({ bay, isPending, onTurnOn, onTurnOff }: {
+  bay: Bay;
+  isPending: boolean;
+  onTurnOn: () => void;
+  onTurnOff: () => void;
+}) {
   const hasWarning = bay.number === 9;
+  const pillColor = isPending ? '#d97706' : bay.screenOn ? '#16a34a' : '#64748b';
+  const dotColor  = isPending ? '#fcd34d' : bay.screenOn ? '#4ade80' : '#94a3b8';
+  const label     = isPending ? 'STARTING' : bay.screenOn ? 'ON' : 'OFF';
+
+  const handleClick = () => {
+    if (isPending) return;
+    if (bay.screenOn) onTurnOff();
+    else onTurnOn();
+  };
+
   return (
     <div
       className="relative rounded-lg overflow-hidden cursor-pointer select-none"
-      style={{ backgroundColor: '#1e2d3d', width: '130px' }}
-      onClick={() => onToggle(bay.id)}
+      style={{ backgroundColor: '#1e2d3d', width: '130px', opacity: isPending ? 0.85 : 1 }}
+      onClick={handleClick}
     >
       {/* Monitor top notch */}
       <div className="flex justify-center pt-1.5 pb-1">
@@ -293,22 +355,15 @@ function MonitorCard({ bay, onToggle }: { bay: Bay; onToggle: (id: string) => vo
         className="mx-2 mb-2 rounded flex flex-col items-start justify-between p-2"
         style={{ backgroundColor: '#0d1f38', minHeight: '72px' }}
       >
-        {/* Bay number */}
         <span className="text-white font-bold text-sm">{bay.number}</span>
-        {/* ON/OFF pill */}
         <button
           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold"
-          style={{
-            backgroundColor: bay.screenOn ? '#16a34a' : '#64748b',
-            color: '#fff',
-            border: 'none',
-          }}
+          style={{ backgroundColor: pillColor, color: '#fff', border: 'none' }}
         >
-          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: bay.screenOn ? '#4ade80' : '#94a3b8' }}/>
-          {bay.screenOn ? 'ON' : 'OFF'}
+          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }}/>
+          {label}
         </button>
       </div>
-      {/* Warning badge */}
       {hasWarning && (
         <div
           className="absolute top-1 right-1 w-5 h-5 rounded flex items-center justify-center text-xs font-bold"
@@ -320,24 +375,48 @@ function MonitorCard({ bay, onToggle }: { bay: Bay; onToggle: (id: string) => vo
 }
 
 // ── Screen Power tab ──────────────────────────────────────────────────────────
-function ScreenPowerTab({ bays, onToggle }: { bays: Bay[]; onToggle: (id: string) => void }) {
-  const [confirmed, setConfirmed] = useState(false);
-  const on = bays.filter(b => b.screenOn).length;
-  const off = bays.length - on;
+function ScreenPowerTab({ bays, onToggle, confirmed, onConfirm }: {
+  bays: Bay[];
+  onToggle: (id: string) => void;
+  confirmed: boolean;
+  onConfirm: () => void;
+}) {
+  const [pendingOn, setPendingOn] = useState<Set<string>>(new Set());
   const [troubleOpen, setTroubleOpen] = useState<string | null>(null);
 
-  const handlePowerAll = (turnOn: boolean) => {
-    bays.forEach(b => onToggle(b.id + (turnOn ? '_on' : '_off')));
+  const startPowerOn = (ids: string[]) => {
+    const toStart = ids.filter(id => {
+      const bay = bays.find(b => b.id === id);
+      return bay && !bay.screenOn && !pendingOn.has(id);
+    });
+    if (!toStart.length) return;
+    setPendingOn(prev => new Set([...prev, ...toStart]));
+    toStart.forEach(id => {
+      const delay = (2 + Math.random() * 8) * 1000;
+      setTimeout(() => {
+        onToggle(id + '_on');
+        setPendingOn(prev => { const next = new Set(prev); next.delete(id); return next; });
+      }, delay);
+    });
   };
+
+  const powerAllOff = () => {
+    setPendingOn(new Set());
+    bays.forEach(b => onToggle(b.id + '_off'));
+  };
+
+  const on        = bays.filter(b => b.screenOn).length;
+  const inProgress = pendingOn.size;
+  const off       = bays.filter(b => !b.screenOn && !pendingOn.has(b.id)).length;
 
   return (
     <div className="flex min-h-[calc(100vh-60px)]">
       {/* Left control panel */}
       <div className="w-[380px] flex-shrink-0 border-r p-6 space-y-4 relative" style={{ borderColor: '#e2e8f0' }}>
-        {/* Warning overlay */}
+        {/* Warning overlay — only shown once */}
         {!confirmed && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center text-center px-8"
-            style={{ backgroundColor: 'rgba(30,45,61,0.92)', borderRadius: '0' }}>
+            style={{ backgroundColor: 'rgba(30,45,61,0.92)' }}>
             <h2
               className="font-black italic uppercase mb-4 leading-tight"
               style={{ fontSize: '2.8rem', color: '#fff', letterSpacing: '-0.02em' }}
@@ -348,7 +427,7 @@ function ScreenPowerTab({ bays, onToggle }: { bays: Bay[]; onToggle: (id: string
               Be aware that using the Screen Power will impact all of the screens in your range.
             </p>
             <button
-              onClick={() => setConfirmed(true)}
+              onClick={onConfirm}
               className="px-8 py-2 rounded text-white font-semibold text-sm"
               style={{ backgroundColor: '#3b82f6' }}
             >
@@ -364,7 +443,7 @@ function ScreenPowerTab({ bays, onToggle }: { bays: Bay[]; onToggle: (id: string
             <span className="font-semibold" style={{ color: '#16a34a' }}>{off} screens</span> will power on
           </p>
           <button
-            onClick={() => handlePowerAll(true)}
+            onClick={() => startPowerOn(bays.filter(b => !b.screenOn).map(b => b.id))}
             className="px-5 py-1.5 rounded text-white text-sm font-semibold"
             style={{ backgroundColor: '#16a34a' }}
           >
@@ -376,10 +455,10 @@ function ScreenPowerTab({ bays, onToggle }: { bays: Bay[]; onToggle: (id: string
         <div className="border rounded-lg p-5" style={{ borderColor: '#e2e8f0' }}>
           <h3 className="font-black text-sm tracking-wide mb-2" style={{ color: '#1e293b' }}>POWER OFF</h3>
           <p className="text-xs mb-4" style={{ color: '#64748b' }}>
-            <span className="font-semibold" style={{ color: '#ef4444' }}>{on} screens</span> will power off
+            <span className="font-semibold" style={{ color: '#ef4444' }}>{on + inProgress} screens</span> will power off
           </p>
           <button
-            onClick={() => handlePowerAll(false)}
+            onClick={powerAllOff}
             className="px-5 py-1.5 rounded text-white text-sm font-semibold"
             style={{ backgroundColor: '#ef4444' }}
           >
@@ -393,7 +472,7 @@ function ScreenPowerTab({ bays, onToggle }: { bays: Bay[]; onToggle: (id: string
           <div className="grid grid-cols-3 gap-2">
             {[
               { label: 'ON', value: on },
-              { label: 'IN PROGRESS', value: 0 },
+              { label: 'IN PROGRESS', value: inProgress },
               { label: 'OFF', value: off },
             ].map(s => (
               <div key={s.label} className="border rounded p-3 text-center" style={{ borderColor: '#e2e8f0' }}>
@@ -435,7 +514,13 @@ function ScreenPowerTab({ bays, onToggle }: { bays: Bay[]; onToggle: (id: string
       <div className="flex-1 p-6">
         <div className="flex flex-wrap gap-4">
           {bays.map(bay => (
-            <MonitorCard key={bay.id} bay={bay} onToggle={onToggle} />
+            <MonitorCard
+              key={bay.id}
+              bay={bay}
+              isPending={pendingOn.has(bay.id)}
+              onTurnOn={() => startPowerOn([bay.id])}
+              onTurnOff={() => onToggle(bay.id + '_off')}
+            />
           ))}
         </div>
       </div>
@@ -455,10 +540,11 @@ const BaysPage: React.FC<BaysPageProps> = ({ blockedBayNums, blockedBaysEnabled 
   const [gridSize, setGridSize] = useState<'large' | 'small'>('large');
   const [assigningBay, setAssigningBay] = useState<Bay | null>(null);
   const [endingBay, setEndingBay] = useState<Bay | null>(null);
+  const [screenPowerConfirmed, setScreenPowerConfirmed] = useState(false);
 
-  const handleAssign = (bay: Bay, partyName: string, minutes: number) => {
+  const handleAssign = (bay: Bay, partyName: string, minutes: number, notes: string) => {
     setBays(prev => prev.map(b =>
-      b.id === bay.id ? { ...b, status: 'golfer', golferName: partyName, sessionStarted: new Date().toISOString() } : b
+      b.id === bay.id ? { ...b, status: 'golfer', golferName: partyName, sessionStarted: new Date().toISOString(), sessionDurationMin: minutes, sessionNotes: notes || undefined } : b
     ));
   };
 
@@ -497,7 +583,7 @@ const BaysPage: React.FC<BaysPageProps> = ({ blockedBayNums, blockedBaysEnabled 
       </div>
 
       {tab === 'screen-power' ? (
-        <ScreenPowerTab bays={bays} onToggle={handleScreenToggle} />
+        <ScreenPowerTab bays={bays} onToggle={handleScreenToggle} confirmed={screenPowerConfirmed} onConfirm={() => setScreenPowerConfirmed(true)} />
       ) : (
         <div className="p-6">
           {/* Grid size + view toggle */}
@@ -543,6 +629,7 @@ const BaysPage: React.FC<BaysPageProps> = ({ blockedBayNums, blockedBaysEnabled 
                   canAssign={!blockedBaysEnabled || blockedBayNums.includes(bay.number)}
                   onAssignClick={setAssigningBay}
                   onEndClick={setEndingBay}
+                  onExpire={handleEnd}
                 />
               ))}
             </div>
@@ -556,6 +643,7 @@ const BaysPage: React.FC<BaysPageProps> = ({ blockedBayNums, blockedBaysEnabled 
                   canAssign={!blockedBaysEnabled || blockedBayNums.includes(bay.number)}
                   onAssignClick={setAssigningBay}
                   onEndClick={setEndingBay}
+                  onExpire={handleEnd}
                 />
               ))}
             </div>
@@ -567,7 +655,7 @@ const BaysPage: React.FC<BaysPageProps> = ({ blockedBayNums, blockedBaysEnabled 
         <AssignModal
           bay={assigningBay}
           onClose={() => setAssigningBay(null)}
-          onComplete={(bay, name, mins, notes) => { handleAssign(bay, name, mins); }}
+          onComplete={(bay, name, mins, notes) => { handleAssign(bay, name, mins, notes); }}
         />
       )}
 

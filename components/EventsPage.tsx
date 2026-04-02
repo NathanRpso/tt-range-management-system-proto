@@ -71,6 +71,33 @@ function getMondayOffset(year: number, month: number) {
   return jsDay === 0 ? 6 : jsDay - 1;
 }
 
+// Returns datetime-local string rounded up to the nearest 30-min slot, using dateStr for the date if provided
+function getNearestFutureHalfHour(dateStr?: string): string {
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  const useDate = dateStr ?? todayStr;
+  if (useDate === todayStr) {
+    const rounded = new Date(now);
+    const mins = rounded.getMinutes();
+    if (mins === 0) {
+      // already on the hour — jump to :30
+      rounded.setMinutes(30, 0, 0);
+    } else if (mins <= 30) {
+      rounded.setMinutes(30, 0, 0);
+    } else {
+      rounded.setHours(rounded.getHours() + 1, 0, 0, 0);
+    }
+    const h = String(rounded.getHours()).padStart(2, '0');
+    const m = String(rounded.getMinutes()).padStart(2, '0');
+    return `${useDate}T${h}:${m}`;
+  }
+  return `${useDate}T09:00`;
+}
+
+function toDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 function CharCount({ value, max }: { value: string; max: number }) {
   return (
     <div className="text-right text-xs mt-0.5" style={{ color: value.length > max * 0.9 ? '#ef4444' : '#94a3b8' }}>
@@ -91,23 +118,45 @@ const inputCls = "w-full border rounded px-3 py-2 text-sm outline-none focus:bor
 const inputStyle = { borderColor: '#e2e8f0', color: '#1e293b' };
 const selectCls = "w-full border rounded px-3 py-2 text-sm outline-none bg-white";
 
-// ── Create Event full-page form ───────────────────────────────────────────────
+// ── Create / Edit Event full-page form ────────────────────────────────────────
+type EventPartial = { title: string; startDate: string; endDate: string; startTime: string; endTime: string; description: string; prizeInfo: string };
+
 interface CreateEventPageProps {
   onBack: () => void;
-  onSubmit: (event: { title: string; startDate: string; endDate: string; startTime: string; endTime: string; description: string; prizeInfo: string }) => void;
-  initialDate?: string; // YYYY-MM-DD
+  onSubmit: (event: EventPartial) => void;
+  initialDate?: string;   // YYYY-MM-DD (for new events)
+  editEvent?: import('@/types').Event; // pre-populate form for editing
 }
 
-function CreateEventPage({ onBack, onSubmit, initialDate }: CreateEventPageProps) {
-  const defaultStart = initialDate ? `${initialDate}T00:00` : '2026-03-28T00:00';
+function FieldError({ msg }: { msg?: string }) {
+  if (!msg) return null;
+  return <p className="text-xs mt-1" style={{ color: '#ef4444' }}>{msg}</p>;
+}
+
+function CreateEventPage({ onBack, onSubmit, initialDate, editEvent }: CreateEventPageProps) {
+  const defaultStart = editEvent
+    ? `${editEvent.startDate}T${editEvent.startTime}`
+    : getNearestFutureHalfHour(initialDate);
+  const defaultEndDate = editEvent ? editEvent.endDate : (initialDate ?? defaultStart.split('T')[0]);
   const [form, setForm] = useState<EventForm>({
-    name: '', startTime: defaultStart, endTime: '', host: 'Golf Complex',
-    coHost: '', website: '', termsUrl: '', prizes: '', description: '',
-    gameMode: 'Closest to Pin', course: COURSES[0], unit: 'Meters',
-    gameRules: '', categories: [{ id: '1', name: 'All players', gender: 'All', age: 'All', skillLevel: 'All (Hcp +9.9-54.0)' }],
-    termsAccepted: false,
+    name:        editEvent?.title       ?? '',
+    startTime:   defaultStart,
+    endTime:     editEvent ? `${editEvent.endDate}T${editEvent.endTime}` : `${defaultEndDate}T23:59`,
+    host:        'Golf Complex',
+    coHost:      '',
+    website:     '',
+    termsUrl:    '',
+    prizes:      editEvent?.prizeInfo   ?? '',
+    description: editEvent?.description ?? '',
+    gameMode:    'Closest to Pin',
+    course:      COURSES[0],
+    unit:        'Meters',
+    gameRules:   '',
+    categories:  [{ id: '1', name: 'All players', gender: 'All', age: 'All', skillLevel: 'All (Hcp +9.9-54.0)' }],
+    termsAccepted: !!editEvent,
   });
   const [courseOpen, setCourseOpen] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const setField = <K extends keyof EventForm>(k: K, v: EventForm[K]) =>
     setForm(f => ({ ...f, [k]: v }));
@@ -127,7 +176,7 @@ function CreateEventPage({ onBack, onSubmit, initialDate }: CreateEventPageProps
   return (
     <div className="min-h-full" style={{ backgroundColor: '#f8fafc' }}>
       <div className="max-w-[750px] mx-auto py-8 px-6">
-        <h1 className="text-2xl font-bold mb-6" style={{ color: '#1e293b' }}>Create event</h1>
+        <h1 className="text-2xl font-bold mb-6" style={{ color: '#1e293b' }}>{editEvent ? 'Edit event' : 'Create event'}</h1>
 
         {/* Event details */}
         <div className="bg-white rounded-lg border mb-5 p-6" style={{ borderColor: '#e2e8f0' }}>
@@ -135,26 +184,29 @@ function CreateEventPage({ onBack, onSubmit, initialDate }: CreateEventPageProps
 
           <div className="mb-4">
             <FieldLabel required>Event name</FieldLabel>
-            <input className={inputCls} style={inputStyle} maxLength={40}
+            <input className={inputCls} style={{ ...inputStyle, borderColor: errors.name ? '#ef4444' : '#e2e8f0' }} maxLength={40}
               placeholder="Be clear and descriptive"
-              value={form.name} onChange={e => setField('name', e.target.value)}/>
+              value={form.name} onChange={e => { setField('name', e.target.value); setErrors(prev => ({ ...prev, name: '' })); }}/>
             <CharCount value={form.name} max={40}/>
+            <FieldError msg={errors.name}/>
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-4 items-start">
             <div>
               <FieldLabel required>Start time</FieldLabel>
               <div className="relative">
-                <input type="datetime-local" className={inputCls} style={inputStyle}
-                  value={form.startTime} onChange={e => setField('startTime', e.target.value)}/>
+                <input type="datetime-local" className={inputCls} style={{ ...inputStyle, borderColor: errors.startTime ? '#ef4444' : '#e2e8f0' }}
+                  value={form.startTime} onChange={e => { setField('startTime', e.target.value); setErrors(prev => ({ ...prev, startTime: '' })); }}/>
               </div>
+              <FieldError msg={errors.startTime}/>
             </div>
             <div className="flex items-start gap-2">
               <div className="flex-1">
                 <FieldLabel required>End time</FieldLabel>
-                <input type="datetime-local" className={inputCls} style={inputStyle}
-                  value={form.endTime} onChange={e => setField('endTime', e.target.value)}
+                <input type="datetime-local" className={inputCls} style={{ ...inputStyle, borderColor: errors.endTime ? '#ef4444' : '#e2e8f0' }}
+                  value={form.endTime} onChange={e => { setField('endTime', e.target.value); setErrors(prev => ({ ...prev, endTime: '' })); }}
                   placeholder="Select end time"/>
+                <FieldError msg={errors.endTime}/>
               </div>
               <button className="mt-6 w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0"
                 style={{ borderColor: '#94a3b8', color: '#94a3b8' }}>
@@ -285,9 +337,10 @@ function CreateEventPage({ onBack, onSubmit, initialDate }: CreateEventPageProps
               <div key={cat.id} className="border rounded-lg p-4" style={{ borderColor: '#e2e8f0' }}>
                 <div className="mb-3">
                   <FieldLabel required>Category name</FieldLabel>
-                  <input className={inputCls} style={inputStyle} maxLength={30}
-                    value={cat.name} onChange={e => updateCategory(cat.id, 'name', e.target.value)}/>
+                  <input className={inputCls} style={{ ...inputStyle, borderColor: errors[`cat_${cat.id}`] ? '#ef4444' : '#e2e8f0' }} maxLength={30}
+                    value={cat.name} onChange={e => { updateCategory(cat.id, 'name', e.target.value); setErrors(prev => ({ ...prev, [`cat_${cat.id}`]: '' })); }}/>
                   <CharCount value={cat.name} max={30}/>
+                  <FieldError msg={errors[`cat_${cat.id}`]}/>
                 </div>
                 <div className="mb-3">
                   <FieldLabel required>Gender</FieldLabel>
@@ -367,7 +420,7 @@ function CreateEventPage({ onBack, onSubmit, initialDate }: CreateEventPageProps
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox"
               checked={form.termsAccepted}
-              onChange={e => setField('termsAccepted', e.target.checked)}
+              onChange={e => { setField('termsAccepted', e.target.checked); setErrors(prev => ({ ...prev, terms: '' })); }}
               className="w-4 h-4 rounded"
               style={{ accentColor: '#3b82f6' }}/>
             <span className="text-sm" style={{ color: '#1e293b' }}>
@@ -375,17 +428,29 @@ function CreateEventPage({ onBack, onSubmit, initialDate }: CreateEventPageProps
               <span style={{ color: '#3b82f6' }}>*</span>
             </span>
           </label>
+          <FieldError msg={errors.terms}/>
         </div>
 
         {/* Create event button */}
         <div className="flex justify-center pb-8">
           <button
             className="px-10 py-2.5 rounded text-white font-semibold text-sm"
-            style={{ backgroundColor: form.termsAccepted ? '#3b82f6' : '#93c5fd', cursor: form.termsAccepted ? 'pointer' : 'not-allowed' }}
+            style={{ backgroundColor: '#3b82f6' }}
             onClick={() => {
-              if (!form.termsAccepted || !form.name) return;
-              const startDate = form.startTime ? form.startTime.split('T')[0] : '';
-              const endDate = form.endTime ? form.endTime.split('T')[0] : startDate;
+              const errs: Record<string, string> = {};
+              if (!form.name.trim()) errs.name = 'Event name is required.';
+              if (!form.startTime) errs.startTime = 'Start time is required.';
+              if (!form.endTime) errs.endTime = 'End time is required.';
+              if (form.startTime && form.endTime && form.endTime <= form.startTime)
+                errs.endTime = 'End time must be after start time.';
+              form.categories.forEach(c => {
+                if (!c.name.trim()) errs[`cat_${c.id}`] = 'Category name is required.';
+              });
+              if (!form.termsAccepted) errs.terms = 'You must accept the terms to create an event.';
+              setErrors(errs);
+              if (Object.keys(errs).length > 0) return;
+              const startDate = form.startTime.split('T')[0];
+              const endDate = form.endTime.split('T')[0] || startDate;
               onSubmit({
                 title: form.name,
                 startDate,
@@ -398,7 +463,7 @@ function CreateEventPage({ onBack, onSubmit, initialDate }: CreateEventPageProps
               onBack();
             }}
           >
-            Create event
+            {editEvent ? 'Save changes' : 'Create event'}
           </button>
         </div>
       </div>
@@ -418,18 +483,24 @@ const EVENT_COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4
 
 const EventsPage: React.FC<EventsPageProps> = ({ events, setEvents }) => {
   const today = new Date();
-  const [calYear, setCalYear] = useState(2026);
-  const [calMonth, setCalMonth] = useState(2); // March
+  const [calYear, setCalYear] = useState(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState(() => new Date().getMonth());
   const [view, setView] = useState<'month' | 'week'>('month');
   const [showCreate, setShowCreate] = useState(false);
   const [clickedDate, setClickedDate] = useState<string | undefined>(undefined);
+  const [editingEvent, setEditingEvent] = useState<CalEvent | null>(null);
 
   const handleDateClick = (dateStr: string) => {
     setClickedDate(dateStr);
     setShowCreate(true);
   };
 
-  const handleCreateSubmit = (partial: { title: string; startDate: string; endDate: string; startTime: string; endTime: string; description: string; prizeInfo: string }) => {
+  const handleEventClick = (ev: CalEvent, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingEvent(ev);
+  };
+
+  const handleCreateSubmit = (partial: EventPartial) => {
     const newEvent: CalEvent = {
       id: `e${Date.now()}`,
       title: partial.title,
@@ -444,6 +515,24 @@ const EventsPage: React.FC<EventsPageProps> = ({ events, setEvents }) => {
     };
     setEvents([...events, newEvent]);
   };
+
+  const handleEditSubmit = (partial: EventPartial) => {
+    if (!editingEvent) return;
+    setEvents(events.map(e => e.id === editingEvent.id
+      ? { ...e, title: partial.title, description: partial.description, startDate: partial.startDate, endDate: partial.endDate, startTime: partial.startTime, endTime: partial.endTime, prizeInfo: partial.prizeInfo }
+      : e
+    ));
+  };
+
+  if (editingEvent) {
+    return (
+      <CreateEventPage
+        onBack={() => setEditingEvent(null)}
+        onSubmit={(partial) => { handleEditSubmit(partial); setEditingEvent(null); }}
+        editEvent={editingEvent}
+      />
+    );
+  }
 
   if (showCreate) {
     return (
@@ -473,16 +562,28 @@ const EventsPage: React.FC<EventsPageProps> = ({ events, setEvents }) => {
   const goToday = () => { setCalMonth(today.getMonth()); setCalYear(today.getFullYear()); };
 
   const totalCells = Math.ceil((offset + daysInMonth) / 7) * 7;
+  const numWeeks = totalCells / 7;
 
-  // Map events to their dates
-  const eventsOnDay = (day: number): CalEvent[] => {
-    if (day < 1 || day > daysInMonth) return [];
-    const mm = String(calMonth + 1).padStart(2, '0');
-    const dd = String(day).padStart(2, '0');
-    const dateStr = `${calYear}-${mm}-${dd}`;
-    return events.filter(e => e.startDate === dateStr || e.endDate === dateStr ||
-      (e.startDate <= dateStr && e.endDate >= dateStr));
+  // Build a date string for any cell index
+  const cellDateStr = (i: number): string => {
+    const dayNum = i - offset + 1;
+    if (dayNum < 1) {
+      const pm = calMonth === 0 ? 11 : calMonth - 1;
+      const py = calMonth === 0 ? calYear - 1 : calYear;
+      return toDateStr(new Date(py, pm, prevMonthDays + dayNum));
+    }
+    if (dayNum > daysInMonth) {
+      const nm = calMonth === 11 ? 0 : calMonth + 1;
+      const ny = calMonth === 11 ? calYear + 1 : calYear;
+      return toDateStr(new Date(ny, nm, dayNum - daysInMonth));
+    }
+    return toDateStr(new Date(calYear, calMonth, dayNum));
   };
+
+  // Stable color per event id
+  const eventColor = (ev: CalEvent) => EVENT_COLORS[events.indexOf(ev) % EVENT_COLORS.length];
+
+  const multiDay = (ev: CalEvent) => ev.startDate !== ev.endDate;
 
   return (
     <div className="flex flex-col min-h-full bg-white">
@@ -532,59 +633,113 @@ const EventsPage: React.FC<EventsPageProps> = ({ events, setEvents }) => {
         ))}
       </div>
 
-      {/* Calendar grid */}
-      <div className="flex-1 grid grid-cols-7" style={{ gridAutoRows: '1fr' }}>
-        {Array.from({ length: totalCells }).map((_, i) => {
-          const dayNum = i - offset + 1;
-          const isCurrentMonth = dayNum >= 1 && dayNum <= daysInMonth;
-          const isPrev = dayNum < 1;
-          const displayDay = isPrev ? prevMonthDays + dayNum : dayNum > daysInMonth ? dayNum - daysInMonth : dayNum;
-          const today_ = isCurrentMonth && isToday(dayNum);
-          const dayEvents = eventsOnDay(dayNum);
-          const mm = String(calMonth + 1).padStart(2, '0');
-          const dd = String(dayNum).padStart(2, '0');
-          const dateStr = `${calYear}-${mm}-${dd}`;
+      {/* Calendar grid — one row per week */}
+      <div className="flex-1 flex flex-col">
+        {Array.from({ length: numWeeks }).map((_, weekIdx) => {
+          const weekDates = Array.from({ length: 7 }).map((_, col) => cellDateStr(weekIdx * 7 + col));
+          const weekStart = weekDates[0];
+          const weekEnd   = weekDates[6];
+
+          // Multi-day events overlapping this week row
+          const spans = events
+            .filter(ev => multiDay(ev) && ev.endDate >= weekStart && ev.startDate <= weekEnd)
+            .map((ev, si) => ({
+              ev,
+              color: eventColor(ev),
+              startCol: weekDates.indexOf(ev.startDate < weekStart ? weekStart : ev.startDate),
+              endCol:   weekDates.indexOf(ev.endDate   > weekEnd   ? weekEnd   : ev.endDate),
+              showTitle: ev.startDate >= weekStart,
+              slotIdx: si,
+            }));
+
+          const spanSlots = spans.length;
 
           return (
-            <div
-              key={i}
-              className="border-r border-b p-2 min-h-[100px] cursor-pointer group"
-              style={{
-                borderColor: '#e8ecf0',
-                backgroundColor: today_ ? '#eff6ff' : isCurrentMonth ? '#fff' : '#f8fafc',
-              }}
-              onClick={() => isCurrentMonth && handleDateClick(dateStr)}
-            >
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center text-sm mb-1"
-                style={{
-                  backgroundColor: today_ ? '#3b82f6' : 'transparent',
-                  color: today_ ? '#fff' : isCurrentMonth ? '#1e293b' : '#cbd5e1',
-                  fontWeight: today_ ? 700 : 400,
-                }}
-              >
-                {displayDay}
-              </div>
-              {/* Event badges */}
-              <div className="space-y-0.5">
-                {dayEvents.slice(0, 3).map((ev, ei) => (
+            <div key={weekIdx} className="relative flex-1 grid grid-cols-7" style={{ minHeight: '100px' }}>
+              {/* Day cells */}
+              {weekDates.map((dateStr, col) => {
+                const dayNum = weekIdx * 7 + col - offset + 1;
+                const isCurrentMonth = dayNum >= 1 && dayNum <= daysInMonth;
+                const displayDay = dayNum < 1
+                  ? prevMonthDays + dayNum
+                  : dayNum > daysInMonth ? dayNum - daysInMonth : dayNum;
+                const today_ = isCurrentMonth && isToday(dayNum);
+
+                // Single-day events only in cell badges
+                const singleDayEvts = events.filter(ev => !multiDay(ev) && ev.startDate === dateStr);
+
+                return (
+                  <div
+                    key={col}
+                    className="border-r border-b p-2 cursor-pointer"
+                    style={{
+                      borderColor: '#e8ecf0',
+                      backgroundColor: today_ ? '#eff6ff' : isCurrentMonth ? '#fff' : '#f8fafc',
+                      paddingTop: spanSlots > 0 ? `${8 + spanSlots * 20}px` : '8px',
+                    }}
+                    onClick={() => isCurrentMonth && handleDateClick(dateStr)}
+                  >
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-sm mb-1"
+                      style={{
+                        backgroundColor: today_ ? '#3b82f6' : 'transparent',
+                        color: today_ ? '#fff' : isCurrentMonth ? '#1e293b' : '#cbd5e1',
+                        fontWeight: today_ ? 700 : 400,
+                      }}
+                    >
+                      {displayDay}
+                    </div>
+                    <div className="space-y-0.5">
+                      {singleDayEvts.slice(0, 2).map((ev, ei) => (
+                        <div
+                          key={ev.id}
+                          className="text-xs px-1.5 py-0.5 rounded font-medium truncate cursor-pointer"
+                          style={{
+                            backgroundColor: eventColor(ev) + '22',
+                            color: eventColor(ev),
+                            borderLeft: `3px solid ${eventColor(ev)}`,
+                          }}
+                          onClick={e => handleEventClick(ev, e)}
+                        >
+                          {ev.title}
+                        </div>
+                      ))}
+                      {singleDayEvts.length > 2 && (
+                        <div className="text-xs" style={{ color: '#94a3b8' }}>+{singleDayEvts.length - 2} more</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Multi-day spanning bars — absolutely positioned */}
+              {spans.map(({ ev, color, startCol, endCol, showTitle, slotIdx }) => {
+                if (startCol === -1 || endCol === -1) return null;
+                const startsHere = ev.startDate >= weekStart;
+                const endsHere   = ev.endDate   <= weekEnd;
+                return (
                   <div
                     key={ev.id}
-                    className="text-xs px-1.5 py-0.5 rounded font-medium truncate"
+                    className="absolute text-xs font-medium flex items-center truncate cursor-pointer"
                     style={{
-                      backgroundColor: EVENT_COLORS[ei % EVENT_COLORS.length] + '22',
-                      color: EVENT_COLORS[ei % EVENT_COLORS.length],
-                      borderLeft: `3px solid ${EVENT_COLORS[ei % EVENT_COLORS.length]}`,
+                      top: `${8 + slotIdx * 20}px`,
+                      left:  `calc(${(startCol / 7) * 100}% + ${startsHere ? 2 : 0}px)`,
+                      width: `calc(${((endCol - startCol + 1) / 7) * 100}% - ${(startsHere ? 2 : 0) + (endsHere ? 2 : 0)}px)`,
+                      height: '16px',
+                      backgroundColor: color + '28',
+                      color,
+                      borderLeft:  startsHere ? `3px solid ${color}` : 'none',
+                      borderRight: endsHere   ? `3px solid ${color}` : 'none',
+                      borderRadius: `${startsHere ? 3 : 0}px ${endsHere ? 3 : 0}px ${endsHere ? 3 : 0}px ${startsHere ? 3 : 0}px`,
+                      paddingLeft: startsHere ? '4px' : '2px',
+                      zIndex: 2,
                     }}
-                    onClick={e => e.stopPropagation()}
+                    onClick={e => handleEventClick(ev, e)}
                   >
-                    {ev.title}
+                    {showTitle ? ev.title : ''}
                   </div>
-                ))}
-                {dayEvents.length > 3 && (
-                  <div className="text-xs" style={{ color: '#94a3b8' }}>+{dayEvents.length - 3} more</div>
-                )}
-              </div>
+                );
+              })}
             </div>
           );
         })}

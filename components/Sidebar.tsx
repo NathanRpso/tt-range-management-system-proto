@@ -1,12 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { NavTab } from '@/types';
+
+const SITES = [
+  { id: 'a3f9c2e1-7b4d-4f8a-9c6e-2d1b5f3a8e7c', name: 'Golf Complex', location: 'us-ky-paducah' },
+];
 
 interface SidebarProps {
   activeTab: NavTab;
   onTabChange: (tab: NavTab) => void;
-  rangeName: string;
   onBellClick: () => void;
 }
 
@@ -99,7 +102,20 @@ const navItems: { label: string; id: NavTab; icon: React.ReactNode }[] = [
   },
 ];
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, rangeName, onBellClick }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, onBellClick }) => {
+  const [dropOpen, setDropOpen] = useState(false);
+  const dropRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (dropRef.current && !dropRef.current.contains(e.target as Node)) setDropOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const site = SITES[0];
+
   return (
     <div
       className="fixed left-0 top-0 h-screen w-[168px] flex flex-col z-20"
@@ -119,16 +135,25 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, rangeName, on
       </div>
 
       {/* Location dropdown */}
-      <div className="px-3 pb-3">
+      <div className="px-3 pb-3 relative" ref={dropRef}>
         <button
+          onClick={() => setDropOpen(o => !o)}
           className="w-full flex items-center justify-between px-3 py-2 rounded text-xs cursor-pointer"
-          style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)', border: '1px solid rgba(255,255,255,0.12)' }}
+          style={{ backgroundColor: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.75)', border: `1px solid ${dropOpen ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.12)'}` }}
         >
-          <span className="truncate text-left">{rangeName}</span>
-          <svg viewBox="0 0 12 12" fill="none" className="w-3 h-3 flex-shrink-0 ml-1">
+          <span className="truncate text-left">{site.name}</span>
+          <svg viewBox="0 0 12 12" fill="none" className="w-3 h-3 flex-shrink-0 ml-1" style={{ transform: dropOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.15s' }}>
             <path d="M2 4l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
+        {dropOpen && (
+          <div className="absolute left-3 right-3 top-full mt-1 rounded-lg overflow-hidden z-50" style={{ backgroundColor: '#0d1f38', border: '1px solid rgba(255,255,255,0.15)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
+            <div className="px-3 py-2 cursor-default" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+              <div className="text-xs font-semibold truncate" style={{ color: '#fff' }}>{site.name}</div>
+              <div className="text-xs mt-0.5 font-mono truncate" style={{ color: 'rgba(255,255,255,0.35)', fontSize: '10px' }}>{site.id}</div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Nav */}
@@ -178,7 +203,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, onTabChange, rangeName, on
             NA
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-semibold truncate" style={{ color: '#fff' }}>Nathan Ade</div>
+            <div className="text-xs font-semibold truncate" style={{ color: '#fff' }}>Nathan A</div>
           </div>
         </button>
       </div>

@@ -52,16 +52,26 @@ const HEIGHT_OPTIONS = [
   { label: '> 20 yards',           min: 20 },
 ];
 
-const PERIOD_RANGES: Record<string, [string, string]> = {
-  'This month':   ['2026-03-01', '2026-03-27'],
-  'Last 7 days':  ['2026-03-20', '2026-03-27'],
-  'Last 30 days': ['2026-02-14', '2026-03-15'],
-};
+function getPeriodRange(p: string, today: string): [string, string] {
+  const d = new Date(today);
+  const fmt = (dt: Date) => dt.toISOString().split('T')[0];
+  if (p === 'This month') {
+    return [fmt(new Date(d.getFullYear(), d.getMonth(), 1)), today];
+  }
+  if (p === 'Last 7 days') {
+    const s = new Date(d); s.setDate(s.getDate() - 6); return [fmt(s), today];
+  }
+  if (p === 'Last 30 days') {
+    const s = new Date(d); s.setDate(s.getDate() - 29); return [fmt(s), today];
+  }
+  return [today, today];
+}
 
 export default function OverNetPage() {
+  const today = new Date().toISOString().split('T')[0];
   const [period, setPeriod]         = useState('This month');
-  const [startDate, setStartDate]   = useState('2026-03-01');
-  const [endDate, setEndDate]       = useState('2026-03-27');
+  const [startDate, setStartDate]   = useState(() => getPeriodRange('This month', new Date().toISOString().split('T')[0])[0]);
+  const [endDate, setEndDate]       = useState(() => getPeriodRange('This month', new Date().toISOString().split('T')[0])[1]);
   const [selectedBays, setSelectedBays] = useState<number[]>([1,2,3,4,5,6,7,8,9]);
   const [bayDropOpen, setBayDropOpen]   = useState(false);
   const [minHeight, setMinHeight]   = useState(0);
@@ -93,7 +103,8 @@ export default function OverNetPage() {
 
   const handlePeriodChange = (p: string) => {
     setPeriod(p);
-    if (PERIOD_RANGES[p]) { setStartDate(PERIOD_RANGES[p][0]); setEndDate(PERIOD_RANGES[p][1]); }
+    const [s, e] = getPeriodRange(p, today);
+    if (p !== 'custom') { setStartDate(s); setEndDate(e); }
   };
 
   const handleDateChange = (start: string, end: string) => {
@@ -188,6 +199,7 @@ export default function OverNetPage() {
           <input
             type="date"
             value={startDate}
+            max={today}
             onChange={e => handleDateChange(e.target.value, endDate)}
             className="px-3 py-1.5 rounded-lg border text-sm"
             style={{ borderColor: '#e2e8f0', backgroundColor: '#fff', color: '#1e293b' }}
@@ -200,6 +212,7 @@ export default function OverNetPage() {
           <input
             type="date"
             value={endDate}
+            max={today}
             onChange={e => handleDateChange(startDate, e.target.value)}
             className="px-3 py-1.5 rounded-lg border text-sm"
             style={{ borderColor: '#e2e8f0', backgroundColor: '#fff', color: '#1e293b' }}

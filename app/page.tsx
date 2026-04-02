@@ -62,7 +62,6 @@ export default function Home() {
       <Sidebar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        rangeName={RANGE_NAME}
         onBellClick={() => setNotifOpen(v => !v)}
       />
       <div className="flex-1 overflow-auto" style={{ marginLeft: '168px' }}>

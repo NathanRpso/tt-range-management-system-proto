@@ -96,13 +96,27 @@ const bayActivityByMetric: Record<string, { bay: number; value: number }[]> = {
   'Usage rate':             [1,2,3,4,5,6,7,8,9].map((b,i) => ({ bay: b, value: [38,44,51,35,49,53,46,41,37][i] })),
 };
 
-// Preset date ranges (used for syncing dropdown ↔ date pickers)
-const PRESET_RANGES: Record<string, [string, string]> = {
-  'Last 7 days':    ['2026-03-20', '2026-03-27'],
-  'Last 30 days':   ['2026-02-14', '2026-03-15'],
-  'Last 90 days':   ['2025-12-27', '2026-03-27'],
-  'Last 12 months': ['2025-03-27', '2026-03-27'],
-};
+// Preset date ranges (computed dynamically from today)
+function getPresetRange(p: string, today: string): [string, string] {
+  const d = new Date(today);
+  const fmt = (dt: Date) => dt.toISOString().split('T')[0];
+  if (p === 'Last 7 days')    { const s = new Date(d); s.setDate(s.getDate() - 6);   return [fmt(s), today]; }
+  if (p === 'Last 30 days')   { const s = new Date(d); s.setDate(s.getDate() - 29);  return [fmt(s), today]; }
+  if (p === 'Last 90 days')   { const s = new Date(d); s.setDate(s.getDate() - 89);  return [fmt(s), today]; }
+  if (p === 'Last 12 months') { const s = new Date(d); s.setFullYear(s.getFullYear() - 1); s.setDate(s.getDate() + 1); return [fmt(s), today]; }
+  return [today, today];
+}
+
+// Prior comparison period label — same duration, immediately before current range
+function getCompareLabel(start: string, end: string): string {
+  const s = new Date(start);
+  const e = new Date(end);
+  const days = Math.round((e.getTime() - s.getTime()) / 86400000);
+  const priorEnd = new Date(s); priorEnd.setDate(priorEnd.getDate() - 1);
+  const priorStart = new Date(priorEnd); priorStart.setDate(priorStart.getDate() - days);
+  const fmtLabel = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${fmtLabel(priorStart)} – ${fmtLabel(priorEnd)}`;
+}
 
 // ── Custom date range helpers ─────────────────────────────────────────────────
 function daysBetween(a: string, b: string): number {
@@ -362,9 +376,10 @@ function LineChart({ data, labels, unit = '', color = '#3b82f6', height = 160 }:
 // ── Main component ────────────────────────────────────────────────────────────
 
 const DashboardPage: React.FC = () => {
+  const today = new Date().toISOString().split('T')[0];
   const [period, setPeriod] = useState('Last 30 days');
-  const [startDate, setStartDate] = useState('2026-02-14');
-  const [endDate, setEndDate] = useState('2026-03-15');
+  const [startDate, setStartDate] = useState(() => getPresetRange('Last 30 days', new Date().toISOString().split('T')[0])[0]);
+  const [endDate, setEndDate] = useState(() => getPresetRange('Last 30 days', new Date().toISOString().split('T')[0])[1]);
   const [customData, setCustomData] = useState<ReturnType<typeof computeCustomData> | null>(null);
   const [gameModeMetric, setGameModeMetric] = useState<'shots' | 'pace' | 'time'>('shots');
   const [detailedMetric, setDetailedMetric] = useState<'shots' | 'sessions' | 'shotRate' | 'players' | 'length' | 'usage'>('shots');
@@ -401,10 +416,9 @@ const DashboardPage: React.FC = () => {
     if (p === 'custom') return;
     setPeriod(p);
     setCustomData(null);
-    if (PRESET_RANGES[p]) {
-      setStartDate(PRESET_RANGES[p][0]);
-      setEndDate(PRESET_RANGES[p][1]);
-    }
+    const [s, e] = getPresetRange(p, today);
+    setStartDate(s);
+    setEndDate(e);
     resetDateRange();
   };
 
@@ -412,7 +426,8 @@ const DashboardPage: React.FC = () => {
     setStartDate(start);
     setEndDate(end);
     if (start && end && end >= start) {
-      const match = Object.entries(PRESET_RANGES).find(([, [s, e]]) => s === start && e === end);
+      const presets = ['Last 7 days', 'Last 30 days', 'Last 90 days', 'Last 12 months'];
+      const match = presets.map(k => [k, getPresetRange(k, today)] as [string, [string, string]]).find(([, [s, e]]) => s === start && e === end);
       if (match) {
         setPeriod(match[0]);
         setCustomData(null);
@@ -491,13 +506,13 @@ const DashboardPage: React.FC = () => {
         <div>
           <label className="text-xs block mb-0.5" style={{ color: '#94a3b8' }}>Start date</label>
           <div className="flex items-center border rounded px-2 py-1.5 gap-2" style={{ borderColor: '#e2e8f0' }}>
-            <input type="date" value={startDate} onChange={e => handleDateChange(e.target.value, endDate)} className="text-sm outline-none" style={{ color: '#1e293b' }}/>
+            <input type="date" value={startDate} max={today} onChange={e => handleDateChange(e.target.value, endDate)} className="text-sm outline-none" style={{ color: '#1e293b' }}/>
           </div>
         </div>
         <div>
           <label className="text-xs block mb-0.5" style={{ color: '#94a3b8' }}>End date</label>
           <div className="flex items-center border rounded px-2 py-1.5 gap-2" style={{ borderColor: '#e2e8f0' }}>
-            <input type="date" value={endDate} onChange={e => handleDateChange(startDate, e.target.value)} className="text-sm outline-none" style={{ color: '#1e293b' }}/>
+            <input type="date" value={endDate} max={today} onChange={e => handleDateChange(startDate, e.target.value)} className="text-sm outline-none" style={{ color: '#1e293b' }}/>
           </div>
         </div>
       </div>
@@ -510,14 +525,9 @@ const DashboardPage: React.FC = () => {
             <div className="flex items-center gap-2 mb-1">
               <h2 className="font-bold text-base" style={{ color: '#1e293b' }}>Quick indicators</h2>
               <InfoBtn tooltip="Quick indicators show aggregated data for the selected period. Total shots, sessions, average session length and usage rate." />
-              <button className="w-5 h-5 rounded-full border flex items-center justify-center" style={{ borderColor: '#94a3b8', color: '#94a3b8' }}>
-                <svg viewBox="0 0 12 12" fill="none" className="w-3 h-3">
-                  <path d="M10 2a6 6 0 100 8M10 2H7M10 2v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
             </div>
             <div className="text-xs mb-4" style={{ color: '#94a3b8' }}>
-              Compared to: {kpi.compareLabel}
+              Compared to: {customData ? kpi.compareLabel : getCompareLabel(startDate, endDate)}
             </div>
             <div className="grid grid-cols-4 gap-6">
               {[
@@ -597,18 +607,22 @@ const DashboardPage: React.FC = () => {
                 </div>
 
                 {/* Contrast + Intervals */}
-                <div className="flex items-center gap-8 mt-3 ml-[52px]">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs" style={{ color: '#64748b' }}>Contrast</span>
-                    <div
-                      className="w-9 h-5 rounded-full relative cursor-pointer transition-colors"
-                      style={{ backgroundColor: contrastOn ? '#3b82f6' : '#cbd5e1' }}
-                      onClick={() => setContrastOn(v => !v)}
-                    >
-                      <div className="w-3.5 h-3.5 bg-white rounded-full absolute top-[3px] transition-transform"
-                        style={{ left: contrastOn ? '19px' : '3px' }}/>
-                    </div>
-                  </div>
+                <div className="flex items-center gap-6 mt-3 ml-[52px]">
+                  <button
+                    onClick={() => setContrastOn(v => !v)}
+                    className="flex items-center gap-2 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
+                    style={{
+                      backgroundColor: contrastOn ? '#1e40af' : '#f1f5f9',
+                      color: contrastOn ? '#fff' : '#475569',
+                      border: `1px solid ${contrastOn ? '#1d4ed8' : '#e2e8f0'}`,
+                    }}
+                  >
+                    <svg viewBox="0 0 14 14" fill="none" className="w-3.5 h-3.5" style={{ flexShrink: 0 }}>
+                      <circle cx="7" cy="7" r="6" stroke="currentColor" strokeWidth="1.3"/>
+                      <path d="M7 1a6 6 0 010 12V1z" fill="currentColor"/>
+                    </svg>
+                    Contrast
+                  </button>
                   <div className="flex items-center gap-2">
                     <span className="text-xs" style={{ color: '#64748b' }}>Intervals</span>
                     <input type="range" min="1" max="8" step="1" value={bucketHours} onChange={e => setBucketHours(+e.target.value)} className="w-24 h-1 accent-blue-500"/>
@@ -701,56 +715,57 @@ const DashboardPage: React.FC = () => {
             </div>
 
             {/* Game mode bar chart with hover tooltips */}
-            <div className="flex items-end gap-1.5 h-40 mb-2">
-              {gameModes.map((gm, i) => {
-                const pct = gmVal(gm) / maxGM;
-                const isHovered = hoveredGM === i;
-                return (
-                  <div
-                    key={i}
-                    className="flex-1 flex flex-col items-center justify-end gap-1 relative"
-                    style={{ height: '100%' }}
-                    onMouseEnter={() => setHoveredGM(i)}
-                    onMouseLeave={() => setHoveredGM(null)}
-                  >
-                    {isHovered && (
-                      <div
-                        className="absolute bottom-full mb-1 left-1/2 z-10 text-xs px-2 py-1.5 rounded pointer-events-none"
-                        style={{
-                          backgroundColor: '#1e293b',
-                          color: '#fff',
-                          transform: 'translateX(-50%)',
-                          whiteSpace: 'nowrap',
-                          boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        <div className="font-semibold">{gm.label}</div>
-                        <div style={{ color: '#93c5fd' }}>{gmTooltipText(gm)}</div>
-                      </div>
-                    )}
+            <div className="overflow-hidden">
+              <div className="flex items-end gap-1 h-40 mb-2">
+                {gameModes.map((gm, i) => {
+                  const pct = gmVal(gm) / maxGM;
+                  const isHovered = hoveredGM === i;
+                  return (
                     <div
-                      className="w-full rounded-sm transition-all"
-                      style={{
-                        height: `${Math.max(pct * 90, 2)}%`,
-                        backgroundColor: isHovered ? '#3b82f6' : '#93c5fd',
-                        minWidth: '14px',
-                      }}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+                      key={i}
+                      className="flex-1 min-w-0 flex flex-col items-center justify-end relative"
+                      style={{ height: '100%' }}
+                      onMouseEnter={() => setHoveredGM(i)}
+                      onMouseLeave={() => setHoveredGM(null)}
+                    >
+                      {isHovered && (
+                        <div
+                          className="absolute bottom-full mb-1 left-1/2 z-10 text-xs px-2 py-1.5 rounded pointer-events-none"
+                          style={{
+                            backgroundColor: '#1e293b',
+                            color: '#fff',
+                            transform: 'translateX(-50%)',
+                            whiteSpace: 'nowrap',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+                            lineHeight: 1.4,
+                          }}
+                        >
+                          <div className="font-semibold">{gm.label}</div>
+                          <div style={{ color: '#93c5fd' }}>{gmTooltipText(gm)}</div>
+                        </div>
+                      )}
+                      <div
+                        className="w-full rounded-sm transition-all"
+                        style={{
+                          height: `${Math.max(pct * 90, 2)}%`,
+                          backgroundColor: isHovered ? '#3b82f6' : '#93c5fd',
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
 
-            {/* Circular icons row */}
-            <div className="flex gap-1.5">
-              {gameModes.map((gm, i) => (
-                <div key={i} className="flex-1 flex justify-center">
-                  <div className="w-8 h-8 rounded-full border-2 flex items-center justify-center" style={{ borderColor: '#cbd5e1' }} title={gm.label}>
-                    <span style={{ fontSize: '11px' }}>⛳</span>
+              {/* Circular icons row */}
+              <div className="flex gap-1">
+                {gameModes.map((gm, i) => (
+                  <div key={i} className="flex-1 min-w-0 flex justify-center">
+                    <div className="w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0" style={{ borderColor: '#cbd5e1' }} title={gm.label}>
+                      <span style={{ fontSize: '9px' }}>⛳</span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
 
